@@ -1,0 +1,13 @@
+<!DOCTYPE html>
+<html lang='{{ or site.Language.LanguageCode `zh-cn` }}'>
+<head>
+{{ partial "head.html" . }}
+</head>
+<body>
+{{ partial "header.html" . }}
+<main class='wrap'>
+{{ block "main" . }}{{ end }}
+</main>
+{{ partial "footer.html" . }}
+</body>
+</html>

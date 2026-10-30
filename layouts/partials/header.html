@@ -1,0 +1,10 @@
+<header class='site-header'>
+  <div class='wrap header-inner'>
+    <a class='brand' href='{{ site.Home.RelPermalink }}'>{{ site.Title }}</a>
+    <nav class='nav'>
+      <a href='{{ `posts/` | relURL }}'>文章</a>
+      <a href='{{ `tags/` | relURL }}'>标签</a>
+      <a href='{{ `index.xml` | relURL }}'>RSS</a>
+    </nav>
+  </div>
+</header>

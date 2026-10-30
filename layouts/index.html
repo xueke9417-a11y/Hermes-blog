@@ -1,0 +1,12 @@
+{{ define "main" }}
+<section class='intro'>
+  <h1>{{ site.Title }}</h1>
+  <p class='lead'>{{ site.Params.description }}</p>
+</section>
+<h2>最新文章</h2>
+{{ range where site.RegularPages `Section` `posts` }}
+  {{ partial "post-card.html" . }}
+{{ else }}
+  <p class='empty'>还没有文章。</p>
+{{ end }}
+{{ end }}
