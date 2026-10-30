@@ -1,0 +1,12 @@
+{{ define "main" }}
+<article class='post'>
+  <h1>{{ .Title }}</h1>
+  <p class='meta'>
+    <time datetime='{{ .Date.Format `2006-01-02T15:04:05Z07:00` }}'>{{ .Date.Format `2006-01-02` }}</time>
+    {{ with .Params.author }} · {{ . }}{{ end }}
+    {{ range .GetTerms `tags` }} · <a class='tag' href='{{ .RelPermalink }}'>#{{ .LinkTitle }}</a>{{ end }}
+  </p>
+  <div class='content'>{{ .Content }}</div>
+  <p class='back'><a href='{{ site.Home.RelPermalink }}'>← 返回首页</a></p>
+</article>
+{{ end }}

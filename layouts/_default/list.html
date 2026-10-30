@@ -1,0 +1,9 @@
+{{ define "main" }}
+<h1>{{ .Title }}</h1>
+{{ with .Content }}<div class='content'>{{ . }}</div>{{ end }}
+{{ range .Pages }}
+  {{ if eq .Kind `page` }}{{ partial "post-card.html" . }}{{ end }}
+{{ else }}
+  <p class='empty'>暂无文章。</p>
+{{ end }}
+{{ end }}
