@@ -20,6 +20,33 @@ jobs:
     env:
       HUGO_VERSION: '0.145.0'
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Preflight - Pages enabled and using GitHub Actions?
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          api="${{ github.api_url }}/repos/${{ github.repository }}/pages"
+          code=$(curl -sS -o /tmp/pages.json -w '%{http_code}' \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" "${api}") || code=000
+          echo "GET ${api} -> ${code}"
+          head -c 300 /tmp/pages.json 2>/dev/null || true
+          echo
+          if [ "${code}" != "200" ]; then
+            echo "::error::GitHub Pages 未启用或不可读（HTTP ${code}）。去 Settings → Pages → Source 选 'GitHub Actions'，再重跑本工作流。"
+            exit 1
+          fi
+          build_type=$(python3 -c "import json;print(json.load(open('/tmp/pages.json')).get('build_type',''))")
+          echo "build_type=${build_type}"
+          if [ "${build_type}" != "workflow" ]; then
+            echo "::error::Pages 的 Source 不是 'GitHub Actions'（build_type=${build_type}）。去 Settings → Pages 改掉后重跑。"
+            exit 1
+          fi
+
       - name: Install Hugo (extended)
         run: |
           wget -q -O "${RUNNER_TEMP}/hugo.deb" \
@@ -27,16 +54,9 @@ jobs:
           sudo dpkg -i "${RUNNER_TEMP}/hugo.deb"
           hugo version
 
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
       - name: Setup Pages
         id: pages
         uses: actions/configure-pages@v5
-        with:
-          enablement: true
 
       - name: Build with Hugo
         env:
@@ -45,6 +65,9 @@ jobs:
           TZ: Asia/Shanghai
         run: |
           hugo --gc --minify --baseURL "${{ steps.pages.outputs.base_url }}/"
+          echo '--- public/ ---'
+          find public -maxdepth 2 -type f | head -30
+          test -f public/index.html || { echo '::error::构建产物里没有 index.html'; exit 1; }
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
