@@ -9,78 +9,87 @@ permissions:
   contents: read
   pages: write
   id-token: write
+  issues: write
 
 concurrency:
   group: pages
   cancel-in-progress: false
 
 jobs:
-  build:
+  deploy:
     runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     env:
       HUGO_VERSION: '0.145.0'
+      HUGO_ENVIRONMENT: production
+      TZ: Asia/Shanghai
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Preflight - Pages enabled and using GitHub Actions?
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Pages API probe (non-blocking)
+        continue-on-error: true
         run: |
           api="${{ github.api_url }}/repos/${{ github.repository }}/pages"
-          code=$(curl -sS -o /tmp/pages.json -w '%{http_code}' \
-            -H "Authorization: Bearer ${GH_TOKEN}" \
-            -H "Accept: application/vnd.github+json" "${api}") || code=000
-          echo "GET ${api} -> ${code}"
-          head -c 300 /tmp/pages.json 2>/dev/null || true
-          echo
-          if [ "${code}" != "200" ]; then
-            echo "::error::GitHub Pages 未启用或不可读（HTTP ${code}）。去 Settings → Pages → Source 选 'GitHub Actions'，再重跑本工作流。"
-            exit 1
-          fi
-          build_type=$(python3 -c "import json;print(json.load(open('/tmp/pages.json')).get('build_type',''))")
-          echo "build_type=${build_type}"
-          if [ "${build_type}" != "workflow" ]; then
-            echo "::error::Pages 的 Source 不是 'GitHub Actions'（build_type=${build_type}）。去 Settings → Pages 改掉后重跑。"
-            exit 1
-          fi
+          {
+            echo "GET ${api}"
+            curl -sS -w '\nHTTP %{http_code}\n' -H "Authorization: Bearer ${{ github.token }}" -H 'Accept: application/vnd.github+json' "${api}"
+            echo ''
+            echo "POST ${api} (build_type=workflow)"
+            curl -sS -X POST -w '\nHTTP %{http_code}\n' -H "Authorization: Bearer ${{ github.token }}" -H 'Accept: application/vnd.github+json' -H 'Content-Type: application/json' -d '{"build_type":"workflow"}' "${api}"
+          } 2>&1 | tee pages.log
 
-      - name: Install Hugo (extended)
+      - name: Install Hugo
+        id: install
         run: |
-          wget -q -O "${RUNNER_TEMP}/hugo.deb" \
-            "https://github.com/gohugoio/hugo/releases/download/v${HUGO_VERSION}/hugo_extended_${HUGO_VERSION}_linux-amd64.deb"
-          sudo dpkg -i "${RUNNER_TEMP}/hugo.deb"
-          hugo version
+          wget -O /tmp/hugo.deb "https://github.com/gohugoio/hugo/releases/download/v${HUGO_VERSION}/hugo_extended_${HUGO_VERSION}_linux-amd64.deb" 2>&1 | tee install.log
+          sudo dpkg -i /tmp/hugo.deb 2>&1 | tee -a install.log
+          hugo version | tee -a install.log
 
       - name: Setup Pages
         id: pages
         uses: actions/configure-pages@v5
+        with:
+          enablement: true
 
       - name: Build with Hugo
-        env:
-          HUGO_ENVIRONMENT: production
-          HUGO_CACHEDIR: ${{ runner.temp }}/hugo_cache
-          TZ: Asia/Shanghai
+        id: build
         run: |
-          hugo --gc --minify --baseURL "${{ steps.pages.outputs.base_url }}/"
-          echo '--- public/ ---'
-          find public -maxdepth 2 -type f | head -30
-          test -f public/index.html || { echo '::error::构建产物里没有 index.html'; exit 1; }
+          set -o pipefail
+          hugo --gc --minify --baseURL "${{ steps.pages.outputs.base_url }}/" 2>&1 | tee hugo.log
+          ls -la public | head -20
 
       - name: Upload artifact
+        id: artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: ./public
 
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+
+      - name: Report failure as issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          {
+            echo "Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            echo ''
+            echo "Step outcomes: install=${{ steps.install.outcome }} pages=${{ steps.pages.outcome }} build=${{ steps.build.outcome }} artifact=${{ steps.artifact.outcome }} deployment=${{ steps.deployment.outcome }}"
+            for f in pages.log install.log hugo.log; do
+              if [ -f "$f" ]; then
+                echo ''
+                echo "### ${f}"
+                echo '```'
+                tail -n 80 "${f}"
+                echo '```'
+              fi
+            done
+          } > body.md
+          gh issue create --title "[CI] ${{ github.workflow }} 失败 #${{ github.run_number }}" --body-file body.md
