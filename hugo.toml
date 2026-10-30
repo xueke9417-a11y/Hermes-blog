@@ -1,0 +1,28 @@
+baseURL = 'https://xueke9417-a11y.github.io/Hermes-blog/'
+languageCode = 'zh-cn'
+defaultContentLanguage = 'zh-cn'
+title = 'Hermes 博客'
+enableRobotsTXT = true
+enableEmoji = true
+summaryLength = 60
+
+[pagination]
+  pagerSize = 10
+
+[params]
+  author = 'xueke9417-a11y'
+  description = '记录 Hermes Agent 的使用、自动化与折腾过程。'
+
+[markup]
+  [markup.goldmark.renderer]
+    unsafe = true
+  [markup.highlight]
+    style = 'github'
+    noClasses = true
+
+[taxonomies]
+  tag = 'tags'
+  category = 'categories'
+
+[outputs]
+  home = ['HTML', 'RSS']
